@@ -29,7 +29,7 @@ def main(args):
     save_path = '-'.join([args.exp, args.dataset, args.model_type])
     args.save_path = osp.join('./results', save_path)
     ensure_path(args.save_path)
-    # 数据集设置
+    
     if args.dataset == 'MiniImageNet':
         from dataloader.mini_imagenet import MiniImageNet as Dataset
     elif args.dataset == 'pcr':
@@ -37,8 +37,6 @@ def main(args):
         from pcr import pcrTest as TestDataset
         trainset = Dataset('train', args)
         pairgenerator = PairGenerator_pcr(trainset, 5, args)
-        # from dataloader.pcr import MiniImageNet as Dataset
-        # from dataloader.pcr import pcrTest as TestDataset
     elif args.dataset == 'isic':
         from isic_dataset.isic import isic_2017 as Dataset
         from isic_dataset.isic import isic_2017_test as TestDataset
@@ -92,7 +90,6 @@ def main(args):
 
     BCEloss = torch.nn.BCEWithLogitsLoss()
 
-    # 训练过程记录组件
     global_count = 0
     writer = SummaryWriter(comment=args.save_path)
     trlog = {}
@@ -114,13 +111,12 @@ def main(args):
 
     cosine_c = 2 ** args.cosine_ratio
 
-    # 训练
+    
     for epoch in range(1, args.max_epoch + 1):
         model.train()
         dense_predict_network.train()
         tl = Averager()
         ta = Averager()
-        # 处理不同batch
         for i, batch in enumerate(train_loader, 1):
         
             optimizer.zero_grad()
@@ -134,11 +130,9 @@ def main(args):
                 data_shot_start = copy.deepcopy(data_shot)
                 data_query_start = copy.deepcopy(data_query)
             else:
-                # 数据构造
                 data, t, data_start= [_.cuda() for _ in batch]
                 data_shot, data_shot_start, data_query, data_query_start, label = pairgenerator.batch_generator(epoch, data, data_start, t)
 
-            # 前向过程
             feat_shot, feat_query = model(data_shot, data_query)
             feat_shot_start, feat_query_start = model(data_shot_start, data_query_start)
             results, cosine, query_class, support_class = dense_predict_network(feat_query, feat_shot, 'train', feat_query_start, feat_shot_start)

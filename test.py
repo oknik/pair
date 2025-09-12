@@ -26,8 +26,6 @@ def main(args):
     elif args.dataset == 'pcr':
         from pcr import MiniImageNet as Dataset
         from pcr import pcrTest as TestDataset
-        # from dataloader.pcr import MiniImageNet as Dataset
-        # from dataloader.pcr import pcrTest as TestDataset
     elif args.dataset == 'isic':
         from isic_dataset.isic import isic_2017 as Dataset
         from isic_dataset.isic import isic_2017_test as TestDataset
@@ -49,7 +47,6 @@ def main(args):
     if torch.cuda.is_available():
         torch.backends.cudnn.benchmark = True
         model = model.cuda()
-        # model = torch.nn.DataParallel(model, device_ids=[0])
         dense_predict_network = dense_predict_network.cuda()
     
     input_sample = torch.randn(1, 3, 224, 224).cuda()
@@ -228,7 +225,7 @@ if __name__ == '__main__':
             Tspecificity += r[i]['specifisity']
             Tsensitivity += r[i]['sensitivity']
             Ttime += r[i]['times']
-        print('5折交叉验证结果')
+        print('5 fold result:')
         print(f'acc:{Tacc / 5.0:.4f}')
         print(f'precision:{Tprecision / 5.0:.4f}')
         print(f'recall:{Trecall / 5.0:.4f}')

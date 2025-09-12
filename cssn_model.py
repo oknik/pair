@@ -35,7 +35,6 @@ class Mlp(nn.Module):
         x = self.act(x)
         x = self.drop(x)
         x = self.fc2(x)
-        # x = self.drop(x)
         return x
 
 
@@ -55,29 +54,27 @@ class CSSN(nn.Module):
         self.pool1 = nn.AvgPool2d(2, 2, 0)
         self.fc2 = Mlp(in_features=98**2, hidden_features=256, out_features=1)
 
-        
-
         self.cosine_sim = Cosine_Sim(args)
 
 
     def forward(self, feat_query, feat_shot, type, feat_query_start, feat_shot_start):
         _, n, c = feat_query.size()
 
-        feat_query = self.fc1(torch.mean(feat_query, dim=1, keepdim=True)) + feat_query  # Q x n x C
-        feat_shot  = self.fc1(torch.mean(feat_shot, dim=1, keepdim=True)) + feat_shot  # KS x n x C
-        feat_query_start  = self.fc1(torch.mean(feat_query_start, dim=1, keepdim=True)) + feat_query_start  # KS x n x C
-        feat_shot_start  = self.fc1(torch.mean(feat_shot_start, dim=1, keepdim=True)) + feat_shot_start  # KS x n x C
+        feat_query = self.fc1(torch.mean(feat_query, dim=1, keepdim=True)) + feat_query  
+        feat_shot  = self.fc1(torch.mean(feat_shot, dim=1, keepdim=True)) + feat_shot  
+        feat_query_start  = self.fc1(torch.mean(feat_query_start, dim=1, keepdim=True)) + feat_query_start  
+        feat_shot_start  = self.fc1(torch.mean(feat_shot_start, dim=1, keepdim=True)) + feat_shot_start  
         feat_query = self.fc_norm1(feat_query)
         feat_shot  = self.fc_norm1(feat_shot)
         feat_query_start  = self.fc_norm1(feat_query_start)
         feat_shot_start  = self.fc_norm1(feat_shot_start)
 
-        query_class = feat_query[:, 0, :].unsqueeze(1)  # Q x 1 x C
-        query_image = feat_query[:, 1:, :]  # Q x L x C
+        query_class = feat_query[:, 0, :].unsqueeze(1)  
+        query_image = feat_query[:, 1:, :]  
         query_image_start = feat_query_start[:, 1:, :]
 
-        support_class = feat_shot[:, 0, :].unsqueeze(1)  # KS x 1 x C
-        support_image = feat_shot[:, 1:, :]  # KS x L x C
+        support_class = feat_shot[:, 0, :].unsqueeze(1) 
+        support_image = feat_shot[:, 1:, :]  
         support_image_start = feat_shot_start[:, 1:, :]
         
         # treatment fusion
@@ -86,8 +83,8 @@ class CSSN(nn.Module):
         query_image = self.fc_norm4(self.fc4(query_image * query_image_start))
         support_image = self.fc_norm4(self.fc4(support_image * support_image_start))
 
-        feat_query = query_image + self.args.lam * query_class  # Q x L x C
-        feat_shot = support_image + self.args.lam * support_class  # KS x L x C
+        feat_query = query_image + self.args.lam * query_class  
+        feat_shot = support_image + self.args.lam * support_class 
 
         feat_query = F.normalize(feat_query, p=2, dim=2)
         feat_query = feat_query - torch.mean(feat_query, dim=2, keepdim=True)
