@@ -29,7 +29,7 @@ class PairGenerator_pcr:
 
     def pair_generator_balance(self):
         for i in range(len(self.labels)):
-            self.pair_load(1, i, i)
+            self.pair_load(1, i, i)# 每个样本与自己配对，标签为1
             for j in range(i+1, len(self.labels)):
                 if self.labels[i] == self.labels[j]:
                     _label = 1
@@ -37,8 +37,8 @@ class PairGenerator_pcr:
                 else: 
                     _label = 0
                 
-                self.pair_load(_label, j, i)
-                self.pair_load(_label, i, j)
+                self.pair_load(_label, j, i)# 每个样本与其他样本配对，标签根据是否同类确定
+                self.pair_load(_label, i, j)# 每对样本配对两次，保证平衡，标签根据是否同类确定
 
     def pair_generator(self):
         for i in range(len(self.labels)):

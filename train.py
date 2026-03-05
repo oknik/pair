@@ -2,6 +2,7 @@ import argparse
 import os.path as osp
 import os
 import copy
+from datetime import datetime
 
 import numpy as np
 import torch
@@ -23,10 +24,12 @@ from pairs.pair_generator import PairGenerator_pcr, PairGenerator_isic
 margin = 0.3
 
 def main(args):
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+
     def save_model(name):
         torch.save(dict(params=model.state_dict()), osp.join(args.save_path, name + '.pth'))
         torch.save(dict(params=dense_predict_network.state_dict()), osp.join(args.save_path, name + '_dense_predict.pth'))
-    save_path = '-'.join([args.exp, args.dataset, args.model_type])
+    save_path = '-'.join([args.exp, args.dataset, args.model_type, timestamp])
     args.save_path = osp.join('./results', save_path)
     ensure_path(args.save_path)
     
@@ -52,19 +55,44 @@ def main(args):
         from isic_dataset.sevenpt import SevenPTTest as TestDataset
         trainset = Dataset('train')
         pairgenerator = PairGenerator_isic(trainset, 5, args)
+    elif args.dataset == 'in':
+        from in_dataset import INDataset as Dataset
+        from in_dataset import INTestDataset as TestDataset
+        from paired_transform import PairedTransform
+        trainset = Dataset(
+            img_root='IN',
+            dataset='train',
+            args=args,
+            task='S',
+            transform=None,
+            fold=0
+        )
+        pairgenerator = PairGenerator_pcr(trainset, 5, args)
     else:
         raise ValueError('Non-supported Dataset.')
     sampler = ImbalancedDatasetSampler(trainset)
 
     train_loader = DataLoader(dataset=trainset, num_workers=8, batch_size=args.batch_size, drop_last=True, shuffle=False, sampler=sampler)
-    valset = TestDataset('val', args)
-    val_loader = DataLoader(dataset=valset, batch_size=1, num_workers=8)
+    
+    if args.dataset == 'in':
+        testset = Dataset(
+            img_root='IN',
+            dataset='val',
+            args=args,
+            task='S',
+            transform=None,
+            fold=0
+        )
+        valset = TestDataset(trainset, testset, args)
+    else:
+        valset = TestDataset('val', args)
+    val_loader = DataLoader(valset, batch_size=1, num_workers=8)
 
     model = BackBone(args)
     dense_predict_network = CSSN(args)
 
     model_dict = model.state_dict()
-    if args.init_weights is not None:
+    if args.init_weights:
         pretrained_dict = torch.load(args.init_weights, map_location='cpu')['teacher']
         pretrained_dict = {k.replace('backbone', 'encoder'): v for k, v in pretrained_dict.items()}
         pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
@@ -188,10 +216,13 @@ def main(args):
 
                 data_shot = train_data.squeeze(0)
                 data_shot_start = train_data_start.squeeze(0)
-                
-                data_query = torch.repeat_interleave(data, repeats=args.num_classes * args.query_num, dim=0)
-                data_query_start = torch.repeat_interleave(data_start, repeats=args.num_classes * args.query_num, dim=0)
 
+                data_query = data.squeeze(0)
+                data_query_start = data_start.squeeze(0)
+                
+                # data_query = torch.repeat_interleave(data, repeats=args.num_classes * args.query_num, dim=0)
+                # data_query_start = torch.repeat_interleave(data_start, repeats=args.num_classes * args.query_num, dim=0)
+                
                 feat_shot, feat_query = model(data_shot, data_query)
                 feat_shot_start, feat_query_start = model(data_shot_start, data_query_start)
 
@@ -223,7 +254,8 @@ def main(args):
         labels = np.array(labels)
         confusion_mat = confusion_matrix(labels, preds)
         
-        acc_sk = (confusion_mat[0, 0] + confusion_mat[1, 1]) / np.sum(confusion_mat[:, :])
+        # acc_sk = (confusion_mat[0, 0] + confusion_mat[1, 1]) / np.sum(confusion_mat[:, :])
+        acc_sk = np.trace(confusion_mat) / np.sum(confusion_mat)
         f1 = f1_score(labels, preds) if args.dataset == 'pcr' or args.dataset == 'cifar' else f1_score(labels, preds, average='macro')
         bacc = np.array([confusion_mat[i, i] / np.sum(confusion_mat[i, :]) for i in range(len(confusion_mat[0]))]).sum() / len(confusion_mat[0])
 
@@ -260,19 +292,19 @@ if __name__ == '__main__':
     parser.add_argument('--max_epoch', type=int, default=70)
     parser.add_argument('--way', type=int, default=2)
     parser.add_argument('--test_way', type=int, default=2)
-    parser.add_argument('--shot', type=int, default=5)
+    parser.add_argument('--shot', type=int, default=4)
     parser.add_argument('--query', type=int, default=15)
     parser.add_argument('--lr', type=float, default=0.00001) #0.00001
     parser.add_argument('--lr_mul', type=float, default=100)# 100
     parser.add_argument('--step_size', type=int, default=5)
     parser.add_argument('--gamma', type=float, default=0.5)
     parser.add_argument('--model_type', type=str, default='small')
-    parser.add_argument('--dataset', type=str, default='pcr', choices=['pcr', 'isic', 'cifar', '7pt'])
+    parser.add_argument('--dataset', type=str, default='in', choices=['pcr', 'isic', 'cifar', '7pt', 'in'])
     parser.add_argument('--gpu', type=str, default='0')
     parser.add_argument('--exp', type=str, default='delete')
     parser.add_argument('--batch_size', type=int, default=8)
     parser.add_argument('--fold', type=int, default=-1)
-    parser.add_argument('--query_num', type=int, default=10)
+    parser.add_argument('--query_num', type=int, default=4)
     parser.add_argument('--num_classes', type=int, default=2)
     parser.add_argument('--init_weights', type=str, default='')
 
@@ -297,6 +329,9 @@ if __name__ == '__main__':
         args.fold = 0
     elif args.dataset == '7pt':
         args.num_classes = 5
+        args.fold = 0
+    elif args.dataset == 'in':
+        args.num_classes = 3
         args.fold = 0
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
