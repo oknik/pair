@@ -157,6 +157,13 @@ def main(args):
                 data_shot, data_query, label = pairgenerator.batch_generator(epoch, data, t, idx)
                 data_shot_start = copy.deepcopy(data_shot)
                 data_query_start = copy.deepcopy(data_query)
+            elif args.dataset in {'in'}:
+                data, t, data_start= [_.cuda() for _ in batch]
+                data_shot, data_shot_start, data_query, data_query_start, label = pairgenerator.batch_generator(epoch, data, data_start, t)
+                data_shot = torch.cat([data_shot, data_shot_start], dim=1)   # [B,6,224,224]
+                data_query = torch.cat([data_query, data_query_start], dim=1) # [B,6,224,224]
+                data_shot_start = copy.deepcopy(data_shot)
+                data_query_start = copy.deepcopy(data_query)
             else:
                 data, t, data_start= [_.cuda() for _ in batch]
                 data_shot, data_shot_start, data_query, data_query_start, label = pairgenerator.batch_generator(epoch, data, data_start, t)
@@ -211,14 +218,20 @@ def main(args):
                     data, t, train_data, _ = [_.cuda() for _ in batch]
                     train_data_start = copy.deepcopy(train_data)
                     data_start = copy.deepcopy(data)
+                elif args.dataset in {'in'}:
+                    data, t, data_start, train_data, train_label, train_data_start = [_.cuda() for _ in batch]
+                    data_query = torch.cat([data, data_start], dim=2)
+                    data_shot = torch.cat([train_data, train_data_start], dim=2)
+                    data_query_start = copy.deepcopy(data_query)
+                    data_shot_start = copy.deepcopy(data_shot)
                 else:
                     data, t, data_start, train_data, train_label, train_data_start = [_.cuda() for _ in batch]
 
-                data_shot = train_data.squeeze(0)
-                data_shot_start = train_data_start.squeeze(0)
+                data_shot = data_shot.squeeze(0)
+                data_shot_start = data_shot_start.squeeze(0)
 
-                data_query = data.squeeze(0)
-                data_query_start = data_start.squeeze(0)
+                data_query = data_query.squeeze(0)
+                data_query_start = data_query_start.squeeze(0)
                 
                 # data_query = torch.repeat_interleave(data, repeats=args.num_classes * args.query_num, dim=0)
                 # data_query_start = torch.repeat_interleave(data_start, repeats=args.num_classes * args.query_num, dim=0)

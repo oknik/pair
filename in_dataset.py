@@ -95,6 +95,10 @@ class INDataset(data_utils.Dataset):
     # 同步增强（C/G一起变换）
     # ===============================
     def get_aug_img(self, img1, img2):
+        if isinstance(img1, torch.Tensor):
+            img1 = tf.to_pil_image(img1)
+        if isinstance(img2, torch.Tensor):
+            img2 = tf.to_pil_image(img2)
 
         img1 = tf.resize(img1, [224, 224])
         img2 = tf.resize(img2, [224, 224])

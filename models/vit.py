@@ -123,7 +123,8 @@ class Block(nn.Module):
 class PatchEmbed(nn.Module):
     """ Image to Patch Embedding
     """
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768):
+    def __init__(self, img_size=224, patch_size=16, in_chans=6, embed_dim=768):
+        # 因为双模态修改了
         super().__init__()
         num_patches = (img_size // patch_size) * (img_size // patch_size)
         self.img_size = img_size

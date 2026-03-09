@@ -2,7 +2,7 @@ import torch
 import os.path as osp
 import pprint
 
-path = '/root/autodl-tmp/CSSN_TMI/results/delete-0-in-small-21Kpretrain/trlog'
+path = '/root/autodl-tmp/CSSN_TMI/results/delete-0-in-small-20260308-231714/trlog'
 
 trlog = torch.load(path, map_location='cpu', weights_only=False)
 num_epochs = len(trlog['train_loss'])
