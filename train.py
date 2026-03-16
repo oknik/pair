@@ -33,32 +33,31 @@ def main(args):
     args.save_path = osp.join('./results', save_path)
     ensure_path(args.save_path)
     
-    if args.dataset == 'MiniImageNet':
-        from dataloader.mini_imagenet import MiniImageNet as Dataset
-    elif args.dataset == 'pcr':
-        from pcr import MiniImageNet as Dataset
-        from pcr import pcrTest as TestDataset
-        trainset = Dataset('train', args)
-        pairgenerator = PairGenerator_pcr(trainset, 5, args)
-    elif args.dataset == 'isic':
-        from isic_dataset.isic import isic_2017 as Dataset
-        from isic_dataset.isic import isic_2017_test as TestDataset
-        trainset = Dataset('train')
-        pairgenerator = PairGenerator_isic(trainset, 5, args)
-    elif args.dataset == 'cifar':
-        from cifar import CIFAR as Dataset
-        from cifar import cifarTest as TestDataset
-        trainset = Dataset('train', args)
-        pairgenerator = PairGenerator_pcr(trainset, 5, args)
-    elif args.dataset == '7pt':
-        from isic_dataset.sevenpt import SevenPT as Dataset
-        from isic_dataset.sevenpt import SevenPTTest as TestDataset
-        trainset = Dataset('train')
-        pairgenerator = PairGenerator_isic(trainset, 5, args)
-    elif args.dataset == 'in':
+    # if args.dataset == 'MiniImageNet':
+    #     from dataloader.mini_imagenet import MiniImageNet as Dataset
+    # elif args.dataset == 'pcr':
+    #     from pcr import MiniImageNet as Dataset
+    #     from pcr import pcrTest as TestDataset
+    #     trainset = Dataset('train', args)
+    #     pairgenerator = PairGenerator_pcr(trainset, 5, args)
+    # elif args.dataset == 'isic':
+    #     from isic_dataset.isic import isic_2017 as Dataset
+    #     from isic_dataset.isic import isic_2017_test as TestDataset
+    #     trainset = Dataset('train')
+    #     pairgenerator = PairGenerator_isic(trainset, 5, args)
+    # elif args.dataset == 'cifar':
+    #     from cifar import CIFAR as Dataset
+    #     from cifar import cifarTest as TestDataset
+    #     trainset = Dataset('train', args)
+    #     pairgenerator = PairGenerator_pcr(trainset, 5, args)
+    # elif args.dataset == '7pt':
+    #     from isic_dataset.sevenpt import SevenPT as Dataset
+    #     from isic_dataset.sevenpt import SevenPTTest as TestDataset
+    #     trainset = Dataset('train')
+    #     pairgenerator = PairGenerator_isic(trainset, 5, args)
+    if args.dataset == 'in':
         from in_dataset import INDataset as Dataset
         from in_dataset import INTestDataset as TestDataset
-        from paired_transform import PairedTransform
         trainset = Dataset(
             img_root='IN',
             dataset='train',
@@ -68,6 +67,30 @@ def main(args):
             fold=0
         )
         pairgenerator = PairGenerator_pcr(trainset, 5, args)
+    elif args.dataset == 'out_t1':
+        from in_dataset import OUTDataset as Dataset
+        from in_dataset import OUTTestDataset as TestDataset
+        trainset_t1 = Dataset(
+            img_root='OUT',
+            dataset='train',
+            args=args,
+            task='T1',
+            transform=None,
+            fold=0
+        )
+        pairgenerator = PairGenerator_pcr(trainset, 5, args)
+    elif args.dataset == 'out_t2':
+        from in_dataset import OUTDataset as Dataset
+        from in_dataset import OUTTestDataset as TestDataset
+        trainset_t2 = Dataset(
+            img_root='OUT',
+            dataset='train',
+            args=args,
+            task='T2',
+            transform=None,
+            fold=0
+        )
+        pairgenerator = PairGenerator_pcr(trainset_t2, 5, args)
     else:
         raise ValueError('Non-supported Dataset.')
     sampler = ImbalancedDatasetSampler(trainset)
@@ -80,6 +103,26 @@ def main(args):
             dataset='val',
             args=args,
             task='S',
+            transform=None,
+            fold=0
+        )
+        valset = TestDataset(trainset, testset, args)
+    elif args.dataset == 'out_t1':
+        testset = Dataset(
+            img_root='OUT',
+            dataset='val',
+            args=args,
+            task='T1',
+            transform=None,
+            fold=0
+        )
+        valset = TestDataset(trainset, testset, args)
+    elif args.dataset == 'out_t2':
+        testset = Dataset(
+            img_root='OUT',
+            dataset='val',
+            args=args,
+            task='T2',
             transform=None,
             fold=0
         )
