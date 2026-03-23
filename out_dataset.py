@@ -1,89 +1,108 @@
-import random
 import os
 import csv
+import random
 from PIL import Image
-import torch.utils.data as data_utils
-from collections import defaultdict
-import torchvision.transforms.functional as tf
 import torch
+from torch.utils.data import Dataset
+import torchvision.transforms.functional as tf
+from collections import defaultdict
 
 
-class OUTDataset(data_utils.Dataset):
-
-    def __init__(self, img_root, dataset, args, transform=None, task='S', fold=0):
+class OUTDataset(Dataset):
+    def __init__(self, img_root, split, task, args=None):
+        """
+        img_root : 数据集根目录
+        split    : train / val / test
+        """
         super().__init__()
 
         self.img_root = img_root
-        self.dataset = dataset
+        self.split = split
         self.args = args
-        self.transform = transform
         self.task = task
-        self.fold = fold
 
-        self.data = []          # img_id
-        self.label = []         # mapped label
-        self.img_map = {}       # img_id -> {"C": fname, "G": fname}
+        self.data = []
+        self.label = []
+        self.img_map = {}
 
-        # ===== 扫描 train 目录 =====
-        train_dir = os.path.join(img_root, "train")
-        for fname in os.listdir(train_dir):
-            if fname.lower().endswith((".png", ".jpg", ".jpeg")):
-                parts = fname.split("-")
-                img_id = parts[0]
-                mode = parts[2].split(".")[0]  # C or G
+        img_dir = os.path.join(img_root, split)
+        csv_path = os.path.join(img_root, f"{split}.csv")
+
+        # =========================
+        # 扫描图片
+        # =========================
+        for fname in os.listdir(img_dir):
+
+            if not fname.lower().endswith((".png", ".jpg", ".jpeg")):
+                continue
+
+            name, _ = os.path.splitext(fname)
+            parts = name.split("-")
+
+            img_id = parts[0]
+            mode = parts[2]   # C or G
+
+            if img_id not in self.img_map:
+                self.img_map[img_id] = {}
+
+            self.img_map[img_id][mode] = fname
+
+        # =========================
+        # 读取 CSV
+        # =========================
+        with open(csv_path) as f:
+
+            reader = csv.reader(f)
+            next(reader)
+
+            for row in reader:
+
+                img_id = row[0]
+                raw_label = int(row[1])
+
                 if img_id not in self.img_map:
-                    self.img_map[img_id] = {}
-                self.img_map[img_id][mode] = fname
+                    continue
 
-        # ===== 读取 CSV =====
-        if dataset == 'train':
-            folds = [i for i in range(5) if i != fold]
-        else:
-            folds = [fold]
+                if "C" not in self.img_map[img_id] or "G" not in self.img_map[img_id]:
+                    continue
 
-        for f in folds:
-            csv_path = os.path.join(img_root, f"fold{f}.csv")
-            with open(csv_path) as file:
-                reader = csv.reader(file)
-                next(reader)
-                for row in reader:
-                    img_id = row[0]
-                    raw_label = int(row[1])
-
-                    if img_id not in self.img_map:
-                        continue
-                    if "C" not in self.img_map[img_id] or "G" not in self.img_map[img_id]:
-                        continue
-
-                    self.data.append(img_id)
-                    self.label.append(raw_label)
+                self.data.append(img_id)
+                self.label.append(raw_label)
 
         self._map_labels()
 
-        # ===== class index（few-shot用）=====
+        # few-shot 索引
         self.class_to_indices = defaultdict(list)
+
         for idx, lab in enumerate(self.label):
             self.class_to_indices[lab].append(idx)
 
+        print(f"{split} dataset loaded")
         print("Label distribution:", {k: len(v) for k, v in self.class_to_indices.items()})
         print("Total samples:", len(self.data))
 
-    # ===============================
+    # =================================
     # label remap
-    # ===============================
+    # =================================
     def _map_labels(self):
-        new_data, new_label = [], []
+
+        new_data = []
+        new_label = []
+
         for img_id, raw_label in zip(self.data, self.label):
 
             if self.task == 'S':
+
                 new_data.append(img_id)
                 new_label.append(raw_label)
 
             elif self.task == 'T1':
+
                 new_data.append(img_id)
                 new_label.append(0 if raw_label == 0 else 1)
 
             elif self.task == 'T2':
+
                 if raw_label in [1, 2]:
                     new_data.append(img_id)
                     new_label.append(raw_label - 1)
@@ -91,12 +110,15 @@ class OUTDataset(data_utils.Dataset):
         self.data = new_data
         self.label = new_label
 
-    # ===============================
-    # 同步增强（C/G一起变换）
-    # ===============================
+    # =================================
+    # 同步增强
+    # =================================
     def get_aug_img(self, img1, img2):
+
+        # 如果已经是 tensor 先转回 PIL
         if isinstance(img1, torch.Tensor):
             img1 = tf.to_pil_image(img1)
+
         if isinstance(img2, torch.Tensor):
             img2 = tf.to_pil_image(img2)
 
@@ -116,9 +138,10 @@ class OUTDataset(data_utils.Dataset):
             img1 = tf.rotate(img1, degree)
             img2 = tf.rotate(img2, degree)
 
-        # ---------- 只在是 PIL 时才转 tensor ----------
+        # 只在不是 tensor 时才转 tensor
         if not isinstance(img1, torch.Tensor):
             img1 = tf.to_tensor(img1)
+
         if not isinstance(img2, torch.Tensor):
             img2 = tf.to_tensor(img2)
 
@@ -127,9 +150,9 @@ class OUTDataset(data_utils.Dataset):
 
         return img1, img2
 
-    # ===============================
-    # 基础接口
-    # ===============================
+    # =================================
+    # Dataset接口
+    # =================================
     def __len__(self):
         return len(self.data)
 
@@ -137,21 +160,22 @@ class OUTDataset(data_utils.Dataset):
         return self.label
 
     def __getitem__(self, idx):
+
         img_id = self.data[idx]
         label = self.label[idx]
 
         fname_C = self.img_map[img_id]["C"]
         fname_G = self.img_map[img_id]["G"]
 
-        path_C = os.path.join(self.img_root, "train", fname_C)
-        path_G = os.path.join(self.img_root, "train", fname_G)
+        path_C = os.path.join(self.img_root, self.split, fname_C)
+        path_G = os.path.join(self.img_root, self.split, fname_G)
 
         img_C = Image.open(path_C).convert("RGB")
         img_G = Image.open(path_G).convert("RGB")
 
         img_C, img_G = self.get_aug_img(img_C, img_G)
-        return img_C, label, img_G
 
+        return img_C, label, img_G
 
 import torch
 from torch.utils.data import Dataset

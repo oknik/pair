@@ -68,29 +68,25 @@ def main(args):
         )
         pairgenerator = PairGenerator_pcr(trainset, 5, args)
     elif args.dataset == 'out_t1':
-        from in_dataset import OUTDataset as Dataset
-        from in_dataset import OUTTestDataset as TestDataset
-        trainset_t1 = Dataset(
-            img_root='OUT',
-            dataset='train',
-            args=args,
+        from out_dataset import OUTDataset as Dataset
+        from out_dataset import OUTTestDataset as TestDataset
+        trainset = Dataset(
+            img_root='tr_val_test/out_tvt',
+            split='train',
             task='T1',
-            transform=None,
-            fold=0
+            args=args
         )
         pairgenerator = PairGenerator_pcr(trainset, 5, args)
     elif args.dataset == 'out_t2':
-        from in_dataset import OUTDataset as Dataset
-        from in_dataset import OUTTestDataset as TestDataset
-        trainset_t2 = Dataset(
-            img_root='OUT',
-            dataset='train',
-            args=args,
+        from out_dataset import OUTDataset as Dataset
+        from out_dataset import OUTTestDataset as TestDataset
+        trainset = Dataset(
+            img_root='tr_val_test/out_tvt',
+            split='train',
             task='T2',
-            transform=None,
-            fold=0
+            args=args
         )
-        pairgenerator = PairGenerator_pcr(trainset_t2, 5, args)
+        pairgenerator = PairGenerator_pcr(trainset, 5, args)
     else:
         raise ValueError('Non-supported Dataset.')
     sampler = ImbalancedDatasetSampler(trainset)
@@ -109,22 +105,18 @@ def main(args):
         valset = TestDataset(trainset, testset, args)
     elif args.dataset == 'out_t1':
         testset = Dataset(
-            img_root='OUT',
-            dataset='val',
-            args=args,
+            img_root='tr_val_test/out_tvt',
+            split='val',
             task='T1',
-            transform=None,
-            fold=0
+            args=args
         )
         valset = TestDataset(trainset, testset, args)
     elif args.dataset == 'out_t2':
         testset = Dataset(
-            img_root='OUT',
-            dataset='val',
-            args=args,
+            img_root='tr_val_test/out_tvt',
+            split='val',
             task='T2',
-            transform=None,
-            fold=0
+            args=args
         )
         valset = TestDataset(trainset, testset, args)
     else:
@@ -200,7 +192,7 @@ def main(args):
                 data_shot, data_query, label = pairgenerator.batch_generator(epoch, data, t, idx)
                 data_shot_start = copy.deepcopy(data_shot)
                 data_query_start = copy.deepcopy(data_query)
-            elif args.dataset in {'in'}:
+            elif args.dataset in {'in', 'out_t1', 'out_t2'}:
                 data, t, data_start= [_.cuda() for _ in batch]
                 data_shot, data_shot_start, data_query, data_query_start, label = pairgenerator.batch_generator(epoch, data, data_start, t)
                 data_shot = torch.cat([data_shot, data_shot_start], dim=1)   # [B,6,224,224]
@@ -261,7 +253,7 @@ def main(args):
                     data, t, train_data, _ = [_.cuda() for _ in batch]
                     train_data_start = copy.deepcopy(train_data)
                     data_start = copy.deepcopy(data)
-                elif args.dataset in {'in'}:
+                elif args.dataset in {'in', 'out_t1', 'out_t2'}:
                     data, t, data_start, train_data, train_label, train_data_start = [_.cuda() for _ in batch]
                     data_query = torch.cat([data, data_start], dim=2)
                     data_shot = torch.cat([train_data, train_data_start], dim=2)
@@ -290,12 +282,15 @@ def main(args):
     
                 segment_sums = []
                 
-                for i in range(num_segments):
-                    start_index = i * args.query_num
+                for s in range(num_segments):
+                    start_index = s * args.query_num
                     end_index = start_index + args.query_num
                     segment_sum = score[start_index:end_index].sum()
                     segment_sums.append(segment_sum)
+                    # print(f"[DEBUG] query_idx={i}, segment={s}, score={score[start_index:end_index]}, sum={segment_sum}")
+
                 pred = np.argmax(segment_sums)
+                # print(f"[DEBUG] query_idx={i}, pred={pred}, true_label={int(t.detach().cpu())}")
                 preds.append(pred)
                 labels.append(int(t.detach().cpu()))
                 if t.data != pred:
@@ -355,7 +350,7 @@ if __name__ == '__main__':
     parser.add_argument('--step_size', type=int, default=5)
     parser.add_argument('--gamma', type=float, default=0.5)
     parser.add_argument('--model_type', type=str, default='small')
-    parser.add_argument('--dataset', type=str, default='in', choices=['pcr', 'isic', 'cifar', '7pt', 'in'])
+    parser.add_argument('--dataset', type=str, default='in', choices=['pcr', 'isic', 'cifar', '7pt', 'in', 'out_t1', 'out_t2'])
     parser.add_argument('--gpu', type=str, default='0')
     parser.add_argument('--exp', type=str, default='delete')
     parser.add_argument('--batch_size', type=int, default=8)
@@ -388,6 +383,9 @@ if __name__ == '__main__':
         args.fold = 0
     elif args.dataset == 'in':
         args.num_classes = 3
+        args.fold = 0
+    elif args.dataset == 'out_t1' or args.dataset == 'out_t2':
+        args.num_classes = 2
         args.fold = 0
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu

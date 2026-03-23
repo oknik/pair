@@ -7,6 +7,7 @@ from datetime import datetime
 import numpy as np
 import torch
 import math
+import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from sklearn.metrics import confusion_matrix, f1_score
@@ -47,6 +48,15 @@ class LowPassModule(nn.Module):
         bottle = torch.cat(priors, 1) # 将所有上采样后的部分沿着通道维度拼接。
         
         return self.relu(bottle)
+
+def vit_to_map(x):
+    # x: [B, N, C]
+    B, N, C = x.shape
+    x = x[:, 1:, :]              # 去掉 cls token
+    H = W = int((N - 1) ** 0.5)  # 14x14
+    x = x.permute(0, 2, 1)       # [B, C, N]
+    x = x.reshape(B, C, H, W)    # [B, C, H, W]
+    return x
 
 def main(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -140,15 +150,20 @@ def main(args):
     t2_model = BackBone(args)
     t2_dense = CSSN(args)
 
-    t1_ckpt = './results/exp-out_t1-small-20240917-123456/max_acc.pth'
-    t2_ckpt = './results/exp-out_t2-small-20240917-'
-    t1_dict = torch.load(t1_ckpt, map_location='cpu')
-    t2_dict = torch.load(t2_ckpt, map_location='cpu')
+    t1_model_ckpt = './results/delete-0-out_t1-small-20260316-170816/max_acc.pth'
+    t1_dense_ckpt = './results/delete-0-out_t1-small-20260316-170816/max_acc_dense_predict.pth'
+    t2_model_ckpt = './results/delete-0-out_t2-small-20260317-103051/max_acc.pth'
+    t2_dense_ckpt = './results/delete-0-out_t2-small-20260317-103051/max_acc_dense_predict.pth'
 
-    t1_model.load_state_dict(t1_dict['params'])
-    t1_dense.load_state_dict(t1_dict['params_dense'])
-    t2_model.load_state_dict(t2_dict['params'])
-    t2_dense.load_state_dict(t2_dict['params_dense'])
+    t1_model_dict = torch.load(t1_model_ckpt, map_location='cpu')
+    t1_dense_dict = torch.load(t1_dense_ckpt, map_location='cpu')
+    t2_model_dict = torch.load(t2_model_ckpt, map_location='cpu')
+    t2_dense_dict = torch.load(t2_dense_ckpt, map_location='cpu')
+
+    t1_model.load_state_dict(t1_model_dict['params'])
+    t1_dense.load_state_dict(t1_dense_dict['params'])
+    t2_model.load_state_dict(t2_model_dict['params'])
+    t2_dense.load_state_dict(t2_dense_dict['params'])
 
     t1_model.eval()
     t1_dense.eval()
@@ -162,8 +177,8 @@ def main(args):
 
     model = BackBone(args)
     dense_predict_network = CSSN(args)
-    model = model.cuda()
-    dense_predict_network = dense_predict_network.cuda()
+    model = model.to(device)
+    dense_predict_network = dense_predict_network.to(device)
 
     model_dict = model.state_dict()
     if args.init_weights:
@@ -184,11 +199,11 @@ def main(args):
     t2_model.encoder.blocks[low_layer_idx].register_forward_hook(forward_hook)
     model.encoder.blocks[low_layer_idx].register_forward_hook(forward_hook)
 
-    t1_low_pass = LowPassModule(in_channel = t1_feature_dim_SA)
-    t2_low_pass = LowPassModule(in_channel = t2_feature_dim_SA)
     t1_feature_dim_SA = t1_model.encoder.embed_dim
     t2_feature_dim_SA = t2_model.encoder.embed_dim
     stu_feature_dim_SA = model.encoder.embed_dim
+    t1_low_pass = LowPassModule(in_channel = t1_feature_dim_SA)
+    t2_low_pass = LowPassModule(in_channel = t2_feature_dim_SA)
 
     cfl_blk_SA = CFL_ConvBlock(stu_feature_dim_SA, [t1_feature_dim_SA, t2_feature_dim_SA], 128).to(device)
 
@@ -280,27 +295,33 @@ def main(args):
 
                 ft1_SA = t1_model.encoder.blocks[3].output
                 ft2_SA = t2_model.encoder.blocks[3].output
+                ft1_SA_map = vit_to_map(ft1_SA)
+                ft2_SA_map = vit_to_map(ft2_SA)
 
                 ft1 = t1_model.encoder.blocks[11].output
                 ft2 = t2_model.encoder.blocks[11].output
+                ft1_map = vit_to_map(ft1)
+                ft2_map = vit_to_map(ft2)
 
             # Student 特征
             feat_shot, feat_query = model(data_shot, data_query)
             feat_shot_start, feat_query_start = model(data_shot_start, data_query_start)
 
             fs_SA = model.encoder.blocks[3].output
+            fs_SA_map = vit_to_map(fs_SA)
             fs = model.encoder.blocks[11].output
+            fs_map = vit_to_map(fs)
 
             # 低层
-            ft1_LP = t1_low_pass(ft1_SA)
-            ft2_LP = t2_low_pass(ft2_SA)
+            ft1_LP = t1_low_pass(ft1_SA_map)
+            ft2_LP = t2_low_pass(ft2_SA_map)
             ft_LP = [ft1_LP, ft2_LP]
-            (hs_LP, ht_LP), (ft_LP_, ft_LP) = cfl_blk_SA(fs_SA, ft_LP)
+            (hs_LP, ht_LP), (ft_LP_, ft_LP) = cfl_blk_SA(fs_SA_map, ft_LP)
             loss_cf_LP = 10*criterion_cf_LP(hs_LP, ht_LP) #浅层特征的MMD损失,没有重构损失
 
             # 高层特征
-            ft = [ft1, ft2]
-            (hs, ht), (ft_, ft) = cfl_blk(fs, ft)
+            ft = [ft1_map, ft2_map]
+            (hs, ht), (ft_, ft) = cfl_blk(fs_map, ft)
             loss_cf = 10*criterion_cf(hs, ht, ft_, ft) #MMD和重构损失
 
             results, cosine, query_class, support_class = dense_predict_network(feat_query, feat_shot, 'train', feat_query_start, feat_shot_start)

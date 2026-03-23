@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .mmd import calc_mmd
+from loss.mmd import calc_mmd
 from typing import List, Optional, Union
 
 def euclidean_loss(hs, ht):
