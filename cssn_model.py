@@ -60,15 +60,19 @@ class CSSN(nn.Module):
     def forward(self, feat_query, feat_shot, type, feat_query_start, feat_shot_start):
         _, n, c = feat_query.size()
 
+        # 非线性变换 + 原特征
         feat_query = self.fc1(torch.mean(feat_query, dim=1, keepdim=True)) + feat_query  
         feat_shot  = self.fc1(torch.mean(feat_shot, dim=1, keepdim=True)) + feat_shot  
         feat_query_start  = self.fc1(torch.mean(feat_query_start, dim=1, keepdim=True)) + feat_query_start  
         feat_shot_start  = self.fc1(torch.mean(feat_shot_start, dim=1, keepdim=True)) + feat_shot_start  
+
+        # layer norm：保持特征的分布稳定
         feat_query = self.fc_norm1(feat_query)
         feat_shot  = self.fc_norm1(feat_shot)
         feat_query_start  = self.fc_norm1(feat_query_start)
         feat_shot_start  = self.fc_norm1(feat_shot_start)
 
+        # 分离 CLS token 和 patch token
         query_class = feat_query[:, 0, :].unsqueeze(1)  
         query_image = feat_query[:, 1:, :]  
         query_image_start = feat_query_start[:, 1:, :]
@@ -78,18 +82,23 @@ class CSSN(nn.Module):
         support_image_start = feat_shot_start[:, 1:, :]
         
         # treatment fusion
+        # image * image_start：强调
         query_image_start = self.fc_norm3(self.fc3(query_image_start.transpose(-1, -2))).transpose(-1, -2)
         support_image_start = self.fc_norm3(self.fc3(support_image_start.transpose(-1, -2))).transpose(-1, -2)
         query_image = self.fc_norm4(self.fc4(query_image * query_image_start))
         support_image = self.fc_norm4(self.fc4(support_image * support_image_start))
 
+        # 融合 CLS token（全局 + 局部）
         feat_query = query_image + self.args.lam * query_class  
         feat_shot = support_image + self.args.lam * support_class 
 
+        # 特征归一化
         feat_query = F.normalize(feat_query, p=2, dim=2)
         feat_query = feat_query - torch.mean(feat_query, dim=2, keepdim=True)
         feat_shot = F.normalize(feat_shot, p=2, dim=2)
         feat_shot = feat_shot - torch.mean(feat_shot, dim=2, keepdim=True)
+
+        # 构造相似度矩阵：query 的每个 patch 和 support 的每个 patch 做点积相似度
         out = torch.matmul(feat_query, feat_shot.transpose(1, 2))
 
         out = self.pool1(out)

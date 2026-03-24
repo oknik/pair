@@ -11,18 +11,30 @@ target ：标签值
 alpha、beta、temperature : 超参数
 """
 def dkd_loss(logits_student, logits_teacher, target, alpha, beta, temperature):
+    # 举例：gt_mask = [0,0,1,0], other_mask = [1,1,0,1]
     gt_mask = _get_gt_mask(logits_student, target)
     other_mask = _get_other_mask(logits_student, target)
+
+    # softmax概率
+    # 举例：pred_student = [0.1,0.2,0.5,0.2], pred_teacher = [0.05,0.15,0.7,0.1]
     pred_student = F.softmax(logits_student / temperature, dim=1)
     pred_teacher = F.softmax(logits_teacher / temperature, dim=1)
+
+    # 变成 GT 类概率和非 GT 类概率
+    # 举例：pred_student = [[0.5],[0.5]], pred_teacher = [[0.7],[0.3]]
     pred_student = cat_mask(pred_student, gt_mask, other_mask)
     pred_teacher = cat_mask(pred_teacher, gt_mask, other_mask)
     log_pred_student = torch.log(pred_student)
+    # KL(T || S)=∑ T⋅(logT−logS)
+    # GT 类 vs 非GT类 的整体区分能力
     tckd_loss = (
         F.kl_div(log_pred_student, pred_teacher, size_average=False)
         * (temperature**2)
         / target.shape[0]
     )
+
+    # 这一步把 GT 类的概率置为 0，非 GT 类的概率置为原来的值
+    # 举例 logits_student = [ 2.1, 1.3, 2.5, 0.8 ] -> [ 2.1, 1.3, -inf, 0.8 ], pred_student = [0.3, 0.2, 0.0, 0.5]
     pred_teacher_part2 = F.softmax(
         logits_teacher / temperature - 1000.0 * gt_mask, dim=1
     )

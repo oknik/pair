@@ -23,6 +23,7 @@ import torch.nn.init as init
 from pairs.pair_generator import PairGenerator_pcr, PairGenerator_isic
 from models.cfl import CFL_ConvBlock
 from loss.loss import SoftCELoss, CFLoss, CFLoss_SA
+from loss.SDD_DKD import multi_dkd
 
 margin = 0.3
 
@@ -324,6 +325,11 @@ def main(args):
             (hs, ht), (ft_, ft) = cfl_blk(fs_map, ft)
             loss_cf = 10*criterion_cf(hs, ht, ft_, ft) #MMD和重构损失
 
+            alpha = 1
+            beta = 8
+            temperature = 4
+            # loss_ce = multi_dkd(patch_score_s, patch_t_outs, labels, alpha, beta, temperature)
+
             results, cosine, query_class, support_class = dense_predict_network(feat_query, feat_shot, 'train', feat_query_start, feat_shot_start)
             loss1 = BCEloss(results, label.float())
 
@@ -475,7 +481,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_classes', type=int, default=2)
     parser.add_argument('--init_weights', type=str, default='')
 
-    parser.add_argument('--cosine_weight', type=float, default=0.01)
+    parser.add_argument('--cosine_weight', type=float, default=0.1)
     parser.add_argument('--cosine_ratio', type=float, default=0.7)
     parser.add_argument('--ppp', type=int, default=7)
 
