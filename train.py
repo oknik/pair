@@ -87,6 +87,26 @@ def main(args):
             args=args
         )
         pairgenerator = PairGenerator_pcr(trainset, 5, args)
+    elif args.dataset == 'out_t1_4':
+        from teacher_dataset_4 import TeacherDataset as Dataset
+        from teacher_dataset_4 import TeacherDataset as TestDataset
+        trainset = Dataset(
+            img_root='tr_val_test/out_tvt',
+            split='train',
+            task='T1',
+            args=args
+        )
+        pairgenerator = PairGenerator_pcr(trainset, 5, args)
+    elif args.dataset == 'out_t2_4':
+        from teacher_dataset_4 import TeacherDataset as Dataset
+        from teacher_dataset_4 import TeacherDataset as TestDataset
+        trainset = Dataset(
+            img_root='tr_val_test/out_tvt',
+            split='train',
+            task='T2',
+            args=args
+        )
+        pairgenerator = PairGenerator_pcr(trainset, 5, args)
     else:
         raise ValueError('Non-supported Dataset.')
     sampler = ImbalancedDatasetSampler(trainset)
@@ -119,6 +139,28 @@ def main(args):
             args=args
         )
         valset = TestDataset(trainset, testset, args)
+    elif args.dataset == 'out_t1_4':
+        valset = Dataset(
+            img_root='tr_val_test/out_tvt',
+            dataset='val',
+            task='T1',
+            args=args,
+            is_train=False,
+            few_shot=True,
+            support_dataset=trainset,
+            fixed_support=True
+        )
+    elif args.dataset == 'out_t2_4':
+        valset = Dataset(
+            img_root='tr_val_test/out_tvt',
+            dataset='val',
+            task='T2',
+            args=args,
+            is_train=False,
+            few_shot=True,
+            support_dataset=trainset,
+            fixed_support=True
+        )
     else:
         valset = TestDataset('val', args)
     val_loader = DataLoader(valset, batch_size=1, num_workers=8)
@@ -253,7 +295,7 @@ def main(args):
                     data, t, train_data, _ = [_.cuda() for _ in batch]
                     train_data_start = copy.deepcopy(train_data)
                     data_start = copy.deepcopy(data)
-                elif args.dataset in {'in', 'out_t1', 'out_t2'}:
+                elif args.dataset in {'in', 'out_t1', 'out_t2', 'out_t1_4', 'out_t2_4'}:
                     data, t, data_start, train_data, train_label, train_data_start = [_.cuda() for _ in batch]
                     data_query = torch.cat([data, data_start], dim=2)
                     data_shot = torch.cat([train_data, train_data_start], dim=2)
@@ -287,10 +329,8 @@ def main(args):
                     end_index = start_index + args.query_num
                     segment_sum = score[start_index:end_index].sum()
                     segment_sums.append(segment_sum)
-                    # print(f"[DEBUG] query_idx={i}, segment={s}, score={score[start_index:end_index]}, sum={segment_sum}")
 
                 pred = np.argmax(segment_sums)
-                # print(f"[DEBUG] query_idx={i}, pred={pred}, true_label={int(t.detach().cpu())}")
                 preds.append(pred)
                 labels.append(int(t.detach().cpu()))
                 if t.data != pred:
@@ -350,7 +390,7 @@ if __name__ == '__main__':
     parser.add_argument('--step_size', type=int, default=5)
     parser.add_argument('--gamma', type=float, default=0.5)
     parser.add_argument('--model_type', type=str, default='small')
-    parser.add_argument('--dataset', type=str, default='in', choices=['pcr', 'isic', 'cifar', '7pt', 'in', 'out_t1', 'out_t2'])
+    parser.add_argument('--dataset', type=str, default='in', choices=['pcr', 'isic', 'cifar', '7pt', 'in', 'out_t1', 'out_t2', 'out_t1_4', 'out_t2_4'])
     parser.add_argument('--gpu', type=str, default='0')
     parser.add_argument('--exp', type=str, default='delete')
     parser.add_argument('--batch_size', type=int, default=8)
@@ -384,7 +424,7 @@ if __name__ == '__main__':
     elif args.dataset == 'in':
         args.num_classes = 3
         args.fold = 0
-    elif args.dataset == 'out_t1' or args.dataset == 'out_t2':
+    elif args.dataset == 'out_t1' or args.dataset == 'out_t2' or args.dataset == 'out_t1_4' or args.dataset == 'out_t2_4':
         args.num_classes = 2
         args.fold = 0
 
