@@ -117,7 +117,7 @@ def main(args):
             fold=0,
             is_train=True
         )
-        pairgenerator = PairGenerator_isic(trainset, 5, args)
+        pairgenerator = PairGenerator_pcr(trainset, 5, args)
     else:
         raise ValueError('Non-supported Dataset.')
     sampler = ImbalancedDatasetSampler(trainset)
@@ -174,10 +174,10 @@ def main(args):
     t2_model = BackBone(args)
     t2_dense = CSSN(args)
 
-    t1_model_ckpt = './results/delete-0-out_t1-small-20260316-170816/max_acc.pth'
-    t1_dense_ckpt = './results/delete-0-out_t1-small-20260316-170816/max_acc_dense_predict.pth'
-    t2_model_ckpt = './results/delete-0-out_t2-small-20260317-103051/max_acc.pth'
-    t2_dense_ckpt = './results/delete-0-out_t2-small-20260317-103051/max_acc_dense_predict.pth'
+    t1_model_ckpt = './results/delete-0-out_t1_4-small-20260401-170701/max_acc.pth'
+    t1_dense_ckpt = './results/delete-0-out_t1_4-small-20260401-170701/max_acc_dense_predict.pth'
+    t2_model_ckpt = './results/delete-0-out_t2_4-small-20260401-171930/max_acc.pth'
+    t2_dense_ckpt = './results/delete-0-out_t2_4-small-20260401-171930/max_acc_dense_predict.pth'
 
     t1_model_dict = torch.load(t1_model_ckpt, map_location='cpu')
     t1_dense_dict = torch.load(t1_dense_ckpt, map_location='cpu')
@@ -348,12 +348,12 @@ def main(args):
             ft2_LP = t2_low_pass(ft2_SA_map)
             ft_LP = [ft1_LP, ft2_LP]
             (hs_LP, ht_LP), (ft_LP_, ft_LP) = cfl_blk_SA(fs_SA_map, ft_LP)
-            loss_cf_LP = 10*criterion_cf_LP(hs_LP, ht_LP) #浅层特征的MMD损失,没有重构损失
+            loss_cf_LP = 0.1*criterion_cf_LP(hs_LP, ht_LP) #浅层特征的MMD损失,没有重构损失
 
             # 高层特征
             ft = [ft1_map, ft2_map]
             (hs, ht), (ft_, ft) = cfl_blk(fs_map, ft)
-            loss_cf = 10*criterion_cf(hs, ht, ft_, ft) #MMD和重构损失
+            loss_cf = 0.1*criterion_cf(hs, ht, ft_, ft) #MMD和重构损失
 
             alpha = 1
             beta = 8
@@ -416,11 +416,10 @@ def main(args):
                     data_shot_start = copy.deepcopy(data_shot)
                 elif args.dataset in {'in_4'}:
                     data, data_start, t, train_data, train_data_start, train_label = [_.cuda() for _ in batch]
-                    data_shot_C = torch.cat([train_data[:, :3], train_data_start[:, :3]], dim=2)
-                    data_shot_G = torch.cat([train_data[:, 3:], train_data_start[:, 3:]], dim=2)
-                    data_query_C = torch.cat([data[:, :3], data_start[:, :3]], dim=2)
-                    data_query_G = torch.cat([data[:, 3:], data_start[:, 3:]], dim=2)
-                    data_shot = torch.cat([data_shot_C, data_shot_G], dim=1)   # [B,6,224,224]
+                    data_query = torch.cat([data, data_start], dim=2)
+                    data_shot = torch.cat([train_data, train_data_start], dim=2)
+                    data_query_start = copy.deepcopy(data_query)
+                    data_shot_start = copy.deepcopy(data_shot)
                 else:
                     data, t, data_start, train_data, train_label, train_data_start = [_.cuda() for _ in batch]
 
@@ -541,6 +540,8 @@ if __name__ == '__main__':
     elif args.dataset == 'in_4':
         args.num_classes = 4
         args.fold = 0
+        args.way = 4
+        args.test_way = 4
 
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu

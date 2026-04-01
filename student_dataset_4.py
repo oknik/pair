@@ -9,7 +9,7 @@ import torch.utils.data as data_utils
 import torchvision.transforms.functional as tf
 
 
-class TeacherDataset(data_utils.Dataset):
+class StudentDataset(data_utils.Dataset):
 
     def __init__(self, img_root, dataset, task, args=None, fold=0, is_train=True, few_shot=False, support_dataset=None, fixed_support=False):
 
