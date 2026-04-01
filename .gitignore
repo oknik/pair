@@ -1,7 +1,6 @@
 runs/
 results/
-IN/
-tr_val_test/
+data/
 *.pth
 *.bin
 
