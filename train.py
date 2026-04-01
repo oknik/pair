@@ -91,8 +91,8 @@ def main(args):
         from teacher_dataset_4 import TeacherDataset as Dataset
         from teacher_dataset_4 import TeacherDataset as TestDataset
         trainset = Dataset(
-            img_root='tr_val_test/out_tvt',
-            split='train',
+            img_root='data/OUT_4',
+            dataset='train',
             task='T1',
             args=args
         )
@@ -101,8 +101,8 @@ def main(args):
         from teacher_dataset_4 import TeacherDataset as Dataset
         from teacher_dataset_4 import TeacherDataset as TestDataset
         trainset = Dataset(
-            img_root='tr_val_test/out_tvt',
-            split='train',
+            img_root='data/OUT_4',
+            dataset='train',
             task='T2',
             args=args
         )
@@ -141,7 +141,7 @@ def main(args):
         valset = TestDataset(trainset, testset, args)
     elif args.dataset == 'out_t1_4':
         valset = Dataset(
-            img_root='tr_val_test/out_tvt',
+            img_root='data/OUT_4',
             dataset='val',
             task='T1',
             args=args,
@@ -152,7 +152,7 @@ def main(args):
         )
     elif args.dataset == 'out_t2_4':
         valset = Dataset(
-            img_root='tr_val_test/out_tvt',
+            img_root='data/OUT_4',
             dataset='val',
             task='T2',
             args=args,
@@ -241,6 +241,13 @@ def main(args):
                 data_query = torch.cat([data_query, data_query_start], dim=1) # [B,6,224,224]
                 data_shot_start = copy.deepcopy(data_shot)
                 data_query_start = copy.deepcopy(data_query)
+            elif args.dataset in {'out_t1_4', 'out_t2_4'}:
+                data, data_start, t = [_.cuda() for _ in batch]
+                data_shot, data_shot_start, data_query, data_query_start, label = pairgenerator.batch_generator(epoch, data, data_start, t)
+                data_shot = torch.cat([data_shot, data_shot_start], dim=1)   # [B,6,224,224]
+                data_query = torch.cat([data_query, data_query_start], dim=1) # [B,6,224,224]
+                data_shot_start = copy.deepcopy(data_shot)
+                data_query_start = copy.deepcopy(data_query)
             else:
                 data, t, data_start= [_.cuda() for _ in batch]
                 data_shot, data_shot_start, data_query, data_query_start, label = pairgenerator.batch_generator(epoch, data, data_start, t)
@@ -295,8 +302,14 @@ def main(args):
                     data, t, train_data, _ = [_.cuda() for _ in batch]
                     train_data_start = copy.deepcopy(train_data)
                     data_start = copy.deepcopy(data)
-                elif args.dataset in {'in', 'out_t1', 'out_t2', 'out_t1_4', 'out_t2_4'}:
+                elif args.dataset in {'in', 'out_t1', 'out_t2'}:
                     data, t, data_start, train_data, train_label, train_data_start = [_.cuda() for _ in batch]
+                    data_query = torch.cat([data, data_start], dim=2)
+                    data_shot = torch.cat([train_data, train_data_start], dim=2)
+                    data_query_start = copy.deepcopy(data_query)
+                    data_shot_start = copy.deepcopy(data_shot)
+                elif args.dataset in {'out_t1_4', 'out_t2_4'}:
+                    data, data_start, t, train_data, train_data_start, train_label = [_.cuda() for _ in batch]
                     data_query = torch.cat([data, data_start], dim=2)
                     data_shot = torch.cat([train_data, train_data_start], dim=2)
                     data_query_start = copy.deepcopy(data_query)

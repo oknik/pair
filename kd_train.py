@@ -106,6 +106,18 @@ def main(args):
             fold=0
         )
         pairgenerator = PairGenerator_pcr(trainset_t2, 5, args)
+    elif args.dataset == 'in_4':
+        from student_dataset_4 import StudentDataset as Dataset
+        from student_dataset_4 import StudentDataset as TestDataset
+        trainset = Dataset(
+            img_root='data/IN_4',
+            dataset='train',
+            task='S',
+            args=args,
+            fold=0,
+            is_train=True
+        )
+        pairgenerator = PairGenerator_isic(trainset, 5, args)
     else:
         raise ValueError('Non-supported Dataset.')
     sampler = ImbalancedDatasetSampler(trainset)
@@ -142,6 +154,17 @@ def main(args):
             fold=0
         )
         valset = TestDataset(trainset, testset, args)
+    elif args.dataset == 'in_4':
+        valset = Dataset(
+            img_root='data/IN_4',
+            dataset='val',
+            task='S',
+            args=args,
+            is_train=False,
+            few_shot=True,
+            support_dataset=trainset,
+            fixed_support=True
+        )
     else:
         valset = TestDataset('val', args)
     val_loader = DataLoader(valset, batch_size=1, num_workers=8)
@@ -285,6 +308,13 @@ def main(args):
                 data_query = torch.cat([data_query_C, data_query_G], dim=1) # [B,6,224,224]
                 data_shot_start = copy.deepcopy(data_shot)
                 data_query_start = copy.deepcopy(data_query)
+            elif args.dataset in {'in_4'}:
+                data, data_start, t = [_.cuda() for _ in batch]
+                data_shot, data_shot_start, data_query, data_query_start, label = pairgenerator.batch_generator(epoch, data, data_start, t)
+                data_shot = torch.cat([data_shot, data_shot_start], dim=1)   # [B,6,224,224]
+                data_query = torch.cat([data_query, data_query_start], dim=1) # [B,6,224,224]
+                data_shot_start = copy.deepcopy(data_shot)
+                data_query_start = copy.deepcopy(data_query)
             else:
                 data, t, data_start= [_.cuda() for _ in batch]
                 data_shot, data_shot_start, data_query, data_query_start, label = pairgenerator.batch_generator(epoch, data, data_start, t)
@@ -384,6 +414,13 @@ def main(args):
                     data_shot = torch.cat([train_data, train_data_start], dim=2)
                     data_query_start = copy.deepcopy(data_query)
                     data_shot_start = copy.deepcopy(data_shot)
+                elif args.dataset in {'in_4'}:
+                    data, data_start, t, train_data, train_data_start, train_label = [_.cuda() for _ in batch]
+                    data_shot_C = torch.cat([train_data[:, :3], train_data_start[:, :3]], dim=2)
+                    data_shot_G = torch.cat([train_data[:, 3:], train_data_start[:, 3:]], dim=2)
+                    data_query_C = torch.cat([data[:, :3], data_start[:, :3]], dim=2)
+                    data_query_G = torch.cat([data[:, 3:], data_start[:, 3:]], dim=2)
+                    data_shot = torch.cat([data_shot_C, data_shot_G], dim=1)   # [B,6,224,224]
                 else:
                     data, t, data_start, train_data, train_label, train_data_start = [_.cuda() for _ in batch]
 
@@ -472,7 +509,7 @@ if __name__ == '__main__':
     parser.add_argument('--step_size', type=int, default=5)
     parser.add_argument('--gamma', type=float, default=0.5)
     parser.add_argument('--model_type', type=str, default='small')
-    parser.add_argument('--dataset', type=str, default='in', choices=['in', 'out_t1', 'out_t2'])
+    parser.add_argument('--dataset', type=str, default='in', choices=['in', 'out_t1', 'out_t2', 'in_4'])
     parser.add_argument('--gpu', type=str, default='0')
     parser.add_argument('--exp', type=str, default='delete')
     parser.add_argument('--batch_size', type=int, default=8)
@@ -500,6 +537,9 @@ if __name__ == '__main__':
         args.fold = 0
     elif args.dataset == 'out_t2':
         args.num_classes = 2
+        args.fold = 0
+    elif args.dataset == 'in_4':
+        args.num_classes = 4
         args.fold = 0
 
 
