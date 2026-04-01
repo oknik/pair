@@ -10,7 +10,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.utils import data
-from sklearn.metrics import confusion_matrix, f1_score
+from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
 from thop import profile
 
 from cssn_model import CSSN
@@ -18,6 +18,7 @@ from models.backbones import BackBone
 from dataloader.samplers import CategoriesSampler
 from tensorboardX import SummaryWriter
 import matplotlib.pyplot as plt
+
 
 def main(args):
     
@@ -35,6 +36,8 @@ def main(args):
     elif args.dataset == '7pt':
         from isic_dataset.sevenpt import SevenPT as Dataset
         from isic_dataset.sevenpt import SevenPTTest as TestDataset
+    elif args.dataset == 'in_4':
+        from student_dataset_4 import StudentDataset as TestDataset
     else:
         raise ValueError('Non-supported Dataset.')
     
@@ -80,6 +83,12 @@ def main(args):
                 if args.dataset in {'isic', '7pt'}:
                     data, t, train_data, _ = [_.cuda() for _ in batch]
                     train_data_start = copy.deepcopy(train_data)
+                    data_start = copy.deepcopy(data)
+                elif args.dataset == 'in_4':
+                    data_C, data_G, t, train_data_C, train_data_G, train_label = [_.cuda() for _ in batch]
+                    train_data = torch.cat([train_data_C, train_data_G], dim=1)
+                    train_data_start = copy.deepcopy(train_data)
+                    data = torch.cat([data_C, data_G], dim=1)
                     data_start = copy.deepcopy(data)
                 else:
                     data, t, data_start, train_data, train_label, train_data_start= [_.cuda() for _ in batch]
@@ -127,8 +136,10 @@ def main(args):
             print('bacc:', bacc)
             print(confusion_mat)
             
-            precision = confusion_mat[1, 1] / np.sum(confusion_mat[:, 1])
-            sensitivity = confusion_mat[1, 1] / np.sum(confusion_mat[1, :])
+            # precision = confusion_mat[1, 1] / np.sum(confusion_mat[:, 1])
+            # sensitivity = confusion_mat[1, 1] / np.sum(confusion_mat[1, :])
+            precision = precision_score(labels, preds, average='macro')
+            sensitivity = recall_score(labels, preds, average='macro')
             recall = sensitivity
             specificity = confusion_mat[0, 0] / np.sum(confusion_mat[0, :])
 
@@ -158,10 +169,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--base_dir', type=str, default='')
     parser.add_argument('--max_epoch', type=int, default=100)
-    parser.add_argument('--way', type=int, default=2)
-    parser.add_argument('--test_way', type=int, default=2)
-    parser.add_argument('--shot', type=int, default=5)
-    parser.add_argument('--query', type=int, default=15)
+    parser.add_argument('--way', type=int, default=4)
+    parser.add_argument('--test_way', type=int, default=4)
+    parser.add_argument('--shot', type=int, default=3)
+    parser.add_argument('--query', type=int, default=5)
     parser.add_argument('--lr', type=float, default=0.00001) #0.00001
     parser.add_argument('--lr_mul', type=float, default=100)# 100
     parser.add_argument('--step_size', type=int, default=5)
@@ -198,6 +209,9 @@ if __name__ == '__main__':
         args.fold = 0
     elif args.dataset == '7pt':
         args.num_classes = 5
+        args.fold = 0
+    elif args.dataset == 'in_4':
+        args.num_classes = 4
         args.fold = 0
 
     exp_name = args.exp
