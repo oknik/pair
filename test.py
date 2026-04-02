@@ -37,7 +37,9 @@ def main(args):
         from isic_dataset.sevenpt import SevenPT as Dataset
         from isic_dataset.sevenpt import SevenPTTest as TestDataset
     elif args.dataset == 'in_4':
+        from student_dataset_4 import StudentDataset as Dataset
         from student_dataset_4 import StudentDataset as TestDataset
+
     else:
         raise ValueError('Non-supported Dataset.')
     
@@ -45,14 +47,18 @@ def main(args):
     model = BackBone(args)
     dense_predict_network = CSSN(args)
 
-    model.load_state_dict(torch.load(f'./results/{args.exp}-{args.dataset}-small/max_{args.metric}.pth')['params'])
-    dense_predict_network.load_state_dict(torch.load(f'./results/{args.exp}-{args.dataset}-small/max_{args.metric}_dense_predict.pth')['params'])
+    model_path = f'./results/delete-0-in_4-small-20260401-175608/max_acc.pth'
+    dense_predict_path = f'./results/delete-0-in_4-small-20260401-175608/max_acc_dense_predict.pth'
+
+    model.load_state_dict(torch.load(model_path)['params'])
+    dense_predict_network.load_state_dict(torch.load(dense_predict_path)['params'])
+    
     if torch.cuda.is_available():
         torch.backends.cudnn.benchmark = True
         model = model.cuda()
         dense_predict_network = dense_predict_network.cuda()
     
-    input_sample = torch.randn(1, 3, 224, 224).cuda()
+    input_sample = torch.randn(1, 6, 224, 224).cuda()
     input_sample2 = torch.randn(1, 197, 384).cuda()
     flops1, params1 = profile(model, inputs=(input_sample, input_sample))
     flops2, params2 = profile(dense_predict_network, inputs=(input_sample2, input_sample2, 'test', input_sample2, input_sample2))
@@ -76,7 +82,27 @@ def main(args):
         for e in range(EPOCHS):
             labels = []
             preds = []
-            valset = TestDataset('test', args)
+            if args.dataset == 'in_4':
+                trainset = Dataset(
+                    img_root='data/IN_4',
+                    dataset='train',
+                    task='S',
+                    args=args,
+                    fold=0,
+                    is_train=True
+                )
+                valset = Dataset(
+                    img_root='data/IN_4',
+                    dataset='test',
+                    task='S',
+                    args=args,
+                    is_train=False,
+                    few_shot=True,
+                    support_dataset=trainset,
+                    fixed_support=True
+                )
+            else:
+                valset = TestDataset('test', args)
             val_loader = DataLoader(dataset=valset, batch_size=1, num_workers=8, pin_memory=True)
             total_time = 0.0
             for i, batch in enumerate(val_loader, 1):
@@ -86,9 +112,9 @@ def main(args):
                     data_start = copy.deepcopy(data)
                 elif args.dataset == 'in_4':
                     data_C, data_G, t, train_data_C, train_data_G, train_label = [_.cuda() for _ in batch]
-                    train_data = torch.cat([train_data_C, train_data_G], dim=1)
+                    train_data = torch.cat([train_data_C, train_data_G], dim=2)
                     train_data_start = copy.deepcopy(train_data)
-                    data = torch.cat([data_C, data_G], dim=1)
+                    data = torch.cat([data_C, data_G], dim=2)
                     data_start = copy.deepcopy(data)
                 else:
                     data, t, data_start, train_data, train_label, train_data_start= [_.cuda() for _ in batch]
@@ -96,8 +122,10 @@ def main(args):
                 data_shot = train_data.squeeze(0)
                 data_shot_start = train_data_start.squeeze(0)
 
-                data_query = torch.repeat_interleave(data, repeats=args.num_classes * args.query_num, dim=0)
-                data_query_start = torch.repeat_interleave(data_start, repeats=args.num_classes * args.query_num, dim=0)
+                data_query = data.squeeze(0)
+                data_query = torch.repeat_interleave(data_query, repeats=args.num_classes * args.query_num, dim=0)
+                data_query_start = data_start.squeeze(0)
+                data_query_start = torch.repeat_interleave(data_query_start, repeats=args.num_classes * args.query_num, dim=0)
 
                 start_time = time.perf_counter()
                 feat_shot, feat_query = model(data_shot, data_query)
@@ -171,18 +199,18 @@ if __name__ == '__main__':
     parser.add_argument('--max_epoch', type=int, default=100)
     parser.add_argument('--way', type=int, default=4)
     parser.add_argument('--test_way', type=int, default=4)
-    parser.add_argument('--shot', type=int, default=3)
+    parser.add_argument('--shot', type=int, default=5)
     parser.add_argument('--query', type=int, default=5)
     parser.add_argument('--lr', type=float, default=0.00001) #0.00001
     parser.add_argument('--lr_mul', type=float, default=100)# 100
     parser.add_argument('--step_size', type=int, default=5)
     parser.add_argument('--gamma', type=float, default=0.5)
     parser.add_argument('--model_type', type=str, default='small')
-    parser.add_argument('--dataset', type=str, default='pcr', choices=['pcr', 'isic', 'cifar', '7pt'])
+    parser.add_argument('--dataset', type=str, default='pcr', choices=['pcr', 'isic', 'cifar', '7pt', 'in_4'])
     parser.add_argument('--gpu', default='0')
     parser.add_argument('--exp', type=str, default='delete')
     parser.add_argument('--batch_size', type=int, default=8)
-    parser.add_argument('--query_num', type=int, default=10)
+    parser.add_argument('--query_num', type=int, default=5)
     parser.add_argument('--metric', type=str, default='acc')
     
     parser.add_argument('--fold', type=int, default=-1)
